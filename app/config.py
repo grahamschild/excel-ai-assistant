@@ -16,11 +16,13 @@ class AppConfig:
         # Default configuration
         self._config = {
             # API settings
-            'api_type': 'openai',  # 'openai' or 'ollama'
+            'api_type': 'ollama',  # 'openai', 'ollama', or 'gemini' - default to ollama
             'api_key': '',  # OpenAI API key
-            'model': 'gpt-3.5-turbo',  # Current selected model
+            'gemini_api_key': '',  # Gemini API key
+            'model': 'gpt-3.5-turbo',  # Current selected model for OpenAI
+            'gemini_model': 'models/gemini-2.0-flash',  # Default Gemini model
             'ollama_url': 'http://localhost:11434',  # Ollama API URL
-            'ollama_model': 'llama3',  # Default Ollama model
+            'ollama_model': 'mistral',  # Default Ollama model
 
             # UI settings
             'theme': 'system',
@@ -172,11 +174,16 @@ class AppConfig:
 
     def get_active_model(self):
         """Get the currently active model info"""
-        api_type = self.get('api_type', 'openai')
+        api_type = self.get('api_type', 'gemini')
         if api_type == 'openai':
             return {
                 'api_type': 'openai',
                 'model': self.get('model', 'gpt-3.5-turbo')
+            }
+        elif api_type == 'gemini':
+            return {
+                'api_type': 'gemini',
+                'model': self.get('gemini_model', 'gemini-1.5-flash')
             }
         else:  # ollama
             return {
@@ -189,6 +196,8 @@ class AppConfig:
         self.set('api_type', api_type)
         if api_type == 'openai':
             self.set('model', model)
+        elif api_type == 'gemini':
+            self.set('gemini_model', model)
         else:  # ollama
             self.set('ollama_model', model)
 

@@ -11,21 +11,25 @@ from typing import List, Dict, Any, Optional, Tuple
 from openai import OpenAI, APIError, RateLimitError
 
 from app.services.ollama_api_manager import OllamaAPIManager
+from app.services.gemini_api_manager import GeminiAPIManager
 
 
 class APIType(Enum):
     """Enum for API types"""
     OPENAI = "openai"
     OLLAMA = "ollama"
+    GEMINI = "gemini"
 
 
 class APIManager:
     """Manager for interacting with AI APIs (OpenAI and Ollama)"""
 
     def __init__(self, api_key: str = "", model: str = "gpt-3.5-turbo",
-                 api_type: str = "openai", ollama_url: str = "http://localhost:11434"):
+                 api_type: str = "openai", ollama_url: str = "http://localhost:11434",
+                 gemini_api_key: str = ""):
         """Initialize the API manager"""
         self.api_key = api_key
+        self.gemini_api_key = gemini_api_key
         self.model = model
         self.api_type = APIType(api_type)
         self.client = None
@@ -35,6 +39,9 @@ class APIManager:
         self.ollama_url = ollama_url
         self.ollama_manager = OllamaAPIManager(base_url=ollama_url)
 
+        # Initialize Gemini manager
+        self.gemini_manager = GeminiAPIManager(api_key=gemini_api_key)
+
         # Rate limiting
         self.request_count = 0
         self.request_start_time = time.time()
@@ -43,6 +50,9 @@ class APIManager:
         # Initialize if API key is provided for OpenAI
         if api_key and self.api_type == APIType.OPENAI:
             self.initialize()
+        # Initialize if API key is provided for Gemini
+        if gemini_api_key and self.api_type == APIType.GEMINI:
+            self.gemini_manager.initialize(gemini_api_key)
 
     def initialize(self, api_key: Optional[str] = None) -> bool:
         """Initialize the API client"""
@@ -60,12 +70,12 @@ class APIManager:
             except Exception as e:
                 self.logger.error(f"Failed to initialize OpenAI client: {e}")
                 return False
-        else:  # OLLAMA
-            # No initialization needed for Ollama as it's handled by requests
+        else:  # OLLAMA or GEMINI
+            # No initialization needed for Ollama/Gemini as they're handled by their managers
             return True
 
     def set_api_type(self, api_type: str) -> None:
-        """Set the API type (openai or ollama)"""
+        """Set the API type (openai, ollama, or gemini)"""
         self.api_type = APIType(api_type)
 
     def set_model(self, model: str) -> None:
@@ -73,6 +83,8 @@ class APIManager:
         self.model = model
         if self.api_type == APIType.OLLAMA:
             self.ollama_manager.set_model(model)
+        elif self.api_type == APIType.GEMINI:
+            self.gemini_manager.set_model(model)
 
     def set_ollama_url(self, url: str) -> None:
         """Set the Ollama API URL"""
@@ -91,6 +103,9 @@ class APIManager:
                 {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "api": "openai"},
                 {"id": "gpt-3.5-turbo-16k", "name": "GPT-3.5 Turbo 16k", "api": "openai"}
             ]
+        elif self.api_type == APIType.GEMINI:
+            # Return Gemini models
+            return self.gemini_manager.get_available_models()
         else:  # OLLAMA
             # Fetch models from Ollama
             success, models, error = self.ollama_manager.list_available_models()
@@ -130,6 +145,9 @@ class APIManager:
                 return False, f"API Error: {str(e)}"
             except Exception as e:
                 return False, f"Error: {str(e)}"
+        elif self.api_type == APIType.GEMINI:
+            # Use Gemini manager to test connection
+            return self.gemini_manager.test_connection()
         else:  # OLLAMA
             # Use Ollama manager to test connection
             return self.ollama_manager.test_connection()
@@ -159,6 +177,10 @@ class APIManager:
         """
         if self.api_type == APIType.OPENAI:
             return self._process_openai(cell_content, system_prompt, user_prompt, temperature, max_tokens, context_data)
+        elif self.api_type == APIType.GEMINI:
+            return self.gemini_manager.process_single_cell(
+                cell_content, system_prompt, user_prompt, temperature, max_tokens, context_data
+            )
         else:  # OLLAMA
             return self.ollama_manager.process_single_cell(
                 cell_content, system_prompt, user_prompt, temperature, max_tokens, context_data

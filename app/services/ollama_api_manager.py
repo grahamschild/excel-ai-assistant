@@ -23,7 +23,7 @@ class OllamaAPIManager:
         # Rate limiting
         self.request_count = 0
         self.request_start_time = time.time()
-        self.max_requests_per_minute = 30  # Default safe limit
+        self.max_requests_per_minute = 120  # Increased limit for local compute
 
     def set_base_url(self, base_url: str) -> None:
         """Set the base URL for Ollama API"""

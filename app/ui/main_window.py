@@ -51,7 +51,8 @@ class ExcelAIAssistantApp:
             api_key=self.config.get('api_key', ''),
             model=self._get_current_model_name(),
             api_type=api_type,
-            ollama_url=self.config.get('ollama_url', 'http://localhost:11434')
+            ollama_url=self.config.get('ollama_url', 'http://localhost:11434'),
+            gemini_api_key=self.config.get('gemini_api_key', '')
         )
 
         self.data_manager = DataManager()
@@ -213,7 +214,7 @@ class ExcelAIAssistantApp:
         ttk.Label(toolbar_frame, text="API:").pack(side=tk.LEFT, padx=5)
         self.api_type_var = tk.StringVar(value=self.config.get('api_type', 'openai').lower())
         self.api_type_combobox = ttk.Combobox(toolbar_frame, textvariable=self.api_type_var, width=8, state="readonly")
-        self.api_type_combobox['values'] = ["openai", "ollama"]  # Use lowercase values to match config
+        self.api_type_combobox['values'] = ["gemini", "openai", "ollama"]  # Gemini first as default
         self.api_type_combobox.pack(side=tk.LEFT, padx=2)
 
         # Set combobox to match current config
@@ -241,13 +242,31 @@ class ExcelAIAssistantApp:
 
         ttk.Button(self.ollama_frame, text="Settings", command=self._open_ollama_settings).pack(side=tk.LEFT, padx=2)
 
+        # Gemini specific settings (visible when Gemini is selected)
+        self.gemini_frame = ttk.Frame(toolbar_frame)
+
+        ttk.Label(self.gemini_frame, text="Gemini API Key:").pack(side=tk.LEFT, padx=5)
+        self.gemini_api_key_entry = ttk.Entry(self.gemini_frame, width=25, show="*")
+        self.gemini_api_key_entry.pack(side=tk.LEFT, padx=2)
+
+        # Set Gemini API key from config
+        gemini_api_key = self.config.get('gemini_api_key', '')
+        if gemini_api_key:
+            self.gemini_api_key_entry.insert(0, gemini_api_key)
+
         # Show the appropriate frame based on selected API type
         if self.api_type_var.get() == 'openai':
             self.openai_frame.pack(side=tk.LEFT, padx=2)
             self.ollama_frame.pack_forget()
-        else:
+            self.gemini_frame.pack_forget()
+        elif self.api_type_var.get() == 'gemini':
+            self.gemini_frame.pack(side=tk.LEFT, padx=2)
             self.openai_frame.pack_forget()
+            self.ollama_frame.pack_forget()
+        else:  # ollama
             self.ollama_frame.pack(side=tk.LEFT, padx=2)
+            self.openai_frame.pack_forget()
+            self.gemini_frame.pack_forget()
 
         # Test connection button
         ttk.Button(toolbar_frame, text="Test API", command=self._test_api_connection).pack(side=tk.LEFT, padx=2)
@@ -289,15 +308,20 @@ class ExcelAIAssistantApp:
         # Update API key when changed
         self.api_key_entry.bind("<FocusOut>", self._api_key_changed)
 
+        # Update Gemini API key when changed
+        self.gemini_api_key_entry.bind("<FocusOut>", self._gemini_api_key_changed)
+
         # Update Ollama URL when changed
         self.ollama_url_var.trace_add("write", self._ollama_url_changed)
 
 
     def _get_current_model_name(self):
         """Get the appropriate model name based on current API type"""
-        api_type = self.config.get('api_type', 'openai').lower()  # Ensure lowercase
+        api_type = self.config.get('api_type', 'gemini').lower()  # Ensure lowercase
         if api_type == 'openai':
             return self.config.get('model', 'gpt-3.5-turbo')
+        elif api_type == 'gemini':
+            return self.config.get('gemini_model', 'models/gemini-2.0-flash')
         else:  # ollama
             return self.config.get('ollama_model', 'llama3')
 
@@ -328,6 +352,25 @@ class ExcelAIAssistantApp:
                 self.model_combobox.set(current_model)
             else:
                 self.model_combobox.set('gpt-3.5-turbo')
+
+            # Update API manager with the correct model
+            self.api_manager.set_model(self.model_combobox.get())
+        elif api_type == 'gemini':
+            # Fixed list of Gemini models
+            models = [
+                "models/gemini-2.0-flash",
+                "models/gemini-2.0-flash-lite",
+                "models/gemini-2.5-flash",
+                "models/gemini-2.5-pro"
+            ]
+            self.model_combobox['values'] = models
+
+            # Set current model or default
+            current_model = self.config.get('gemini_model', 'models/gemini-2.0-flash')
+            if current_model in models:
+                self.model_combobox.set(current_model)
+            else:
+                self.model_combobox.set('models/gemini-2.0-flash')
 
             # Update API manager with the correct model
             self.api_manager.set_model(self.model_combobox.get())
@@ -391,9 +434,15 @@ class ExcelAIAssistantApp:
         if api_type == 'openai':
             self.openai_frame.pack(side=tk.LEFT, padx=2)
             self.ollama_frame.pack_forget()
-        else:
+            self.gemini_frame.pack_forget()
+        elif api_type == 'gemini':
+            self.gemini_frame.pack(side=tk.LEFT, padx=2)
             self.openai_frame.pack_forget()
+            self.ollama_frame.pack_forget()
+        else:  # ollama
             self.ollama_frame.pack(side=tk.LEFT, padx=2)
+            self.openai_frame.pack_forget()
+            self.gemini_frame.pack_forget()
 
         # Update model list and set appropriate model
         self._update_model_list()
@@ -411,9 +460,11 @@ class ExcelAIAssistantApp:
             return
 
         # Update the right config value based on API type
-        api_type = self.config.get('api_type', 'openai').lower()  # Ensure lowercase
+        api_type = self.config.get('api_type', 'gemini').lower()  # Ensure lowercase
         if api_type == 'openai':
             self.config.set('model', model)
+        elif api_type == 'gemini':
+            self.config.set('gemini_model', model)
         else:
             self.config.set('ollama_model', model)
 
@@ -757,6 +808,10 @@ class ExcelAIAssistantApp:
         if hasattr(self, 'api_key_entry'):
             self.config.set('api_key', self.api_key_entry.get())
 
+        # Save Gemini API key
+        if hasattr(self, 'gemini_api_key_entry'):
+            self.config.set('gemini_api_key', self.gemini_api_key_entry.get())
+
         # Save model
         if hasattr(self, 'model_var'):
             self.config.set('model', self.model_var.get())
@@ -868,6 +923,17 @@ class ExcelAIAssistantApp:
 
         # Save to config
         self.config.set('api_key', api_key)
+
+    def _gemini_api_key_changed(self, event=None):
+        """Handle Gemini API key change"""
+        gemini_api_key = self.gemini_api_key_entry.get()
+
+        # Update Gemini API key in the API manager
+        self.api_manager.gemini_api_key = gemini_api_key
+        self.api_manager.gemini_manager.initialize(gemini_api_key)
+
+        # Save to config
+        self.config.set('gemini_api_key', gemini_api_key)
 
     def _ollama_url_changed(self, *args):
         """Handle Ollama URL change"""
@@ -1245,6 +1311,22 @@ class ExcelAIAssistantApp:
             self.api_manager.set_api_type('openai')
             self.api_manager.initialize(api_key)
             self.api_manager.set_model(model)
+        elif api_type == 'gemini':
+            # Get Gemini API key
+            gemini_api_key = self.gemini_api_key_entry.get()
+
+            if not gemini_api_key:
+                messagebox.showerror("Error", "API Key is required for Gemini")
+                return
+
+            # Get selected model
+            model = self.model_var.get()
+
+            # Update API manager
+            self.api_manager.set_api_type('gemini')
+            self.api_manager.gemini_api_key = gemini_api_key
+            self.api_manager.gemini_manager.initialize(gemini_api_key)
+            self.api_manager.gemini_manager.set_model(model)
         else:  # ollama
             # Update API manager
             url = self.ollama_url_var.get()
